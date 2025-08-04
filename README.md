@@ -1,16 +1,16 @@
-# CORS Preflight Request Issue and Proxy Solution
+# Problema de Solicitud Preliminar CORS y Solución de Proxy
 
-## Problem Description
+## Descripción del Problema
 
-This React application encountered a CORS (Cross-Origin Resource Sharing) issue when attempting to make OAuth token requests to an external API endpoint. The problem manifested as incomplete CORS responses from the server when the browser automatically included the `Access-Control-Request-Method: POST` header in preflight requests.
+Esta aplicación React encontró un problema de CORS (Intercambio de Recursos de Origen Cruzado) al intentar realizar solicitudes de token OAuth a un endpoint de API externo. El problema se manifestó como respuestas CORS incompletas del servidor cuando el navegador incluía automáticamente el encabezado `Access-Control-Request-Method: POST` en las solicitudes preliminares.
 
-## Root Cause Analysis
+## Análisis de la Causa Raíz
 
-### Observation
+### Observación
 
-The external OAuth server at `https://aqua.maxapex.net/apex/a244716b/oauth/token` responds differently depending on whether the preflight request includes the `Access-Control-Request-Method` header:
+El servidor OAuth externo en `https://aqua.maxapex.net/apex/a244716b/oauth/token` responde de manera diferente dependiendo de si la solicitud preliminar incluye el encabezado `Access-Control-Request-Method`:
 
-**Without `Access-Control-Request-Method` header (complete CORS response):**
+**Sin el encabezado `Access-Control-Request-Method` (respuesta CORS completa):**
 ```bash
 curl 'https://aqua.maxapex.net/apex/a244716b/oauth/token' -X OPTIONS \
   -H 'User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:138.0) Gecko/20100101 Firefox/138.0' \
@@ -29,7 +29,7 @@ curl 'https://aqua.maxapex.net/apex/a244716b/oauth/token' -X OPTIONS \
   -H 'Cache-Control: no-cache' -i
 ```
 
-**Response:**
+**Respuesta:**
 ```
 HTTP/1.1 200 
 Date: Mon, 04 Aug 2025 18:43:00 GMT
@@ -44,7 +44,7 @@ Keep-Alive: timeout=5, max=100
 Connection: Keep-Alive
 ```
 
-**With `Access-Control-Request-Method: POST` header (incomplete CORS response):**
+**Con el encabezado `Access-Control-Request-Method: POST` (respuesta CORS incompleta):**
 ```bash
 curl 'https://aqua.maxapex.net/apex/a244716b/oauth/token' -X OPTIONS \
   -H 'User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:138.0) Gecko/20100101 Firefox/138.0' \
@@ -64,7 +64,7 @@ curl 'https://aqua.maxapex.net/apex/a244716b/oauth/token' -X OPTIONS \
   -H 'Cache-Control: no-cache' -i
 ```
 
-**Response:**
+**Respuesta:**
 ```
 HTTP/1.1 200 
 Date: Mon, 04 Aug 2025 18:43:21 GMT
@@ -74,80 +74,81 @@ Keep-Alive: timeout=5, max=100
 Connection: Keep-Alive
 ```
 
-### Browser Behavior
+### Comportamiento del Navegador
 
-The browser automatically adds the `Access-Control-Request-Method` header during CORS preflight requests when any of the following conditions are met:
+El navegador agrega automáticamente el encabezado `Access-Control-Request-Method` durante las solicitudes preliminares de CORS cuando se cumple alguna de las siguientes condiciones:
 
-1. **HTTP method** other than GET, HEAD, or simple POST
-2. **Custom headers** beyond simple headers (like `Authorization`)
-3. **Content-Type** other than `application/x-www-form-urlencoded`, `multipart/form-data`, or `text/plain`
+1. **Método HTTP** diferente de GET, HEAD o POST simple
+2. **Encabezados personalizados** más allá de los encabezados simples (como `Authorization`)
+3. **Content-Type** diferente de `application/x-www-form-urlencoded`, `multipart/form-data` o `text/plain`
 
-In our case, the `Authorization` header triggers the preflight request with the problematic `Access-Control-Request-Method: POST` header.
+En nuestro caso, el encabezado `Authorization` activa la solicitud preliminar con el problemático encabezado `Access-Control-Request-Method: POST`.
 
-### Server Limitation
+### Limitación del Servidor
 
-We cannot modify the external OAuth server's CORS implementation to properly handle requests that include the `Access-Control-Request-Method` header. The server appears to have a bug or misconfiguration that causes it to omit required CORS headers when this specific header is present.
+No podemos modificar la implementación de CORS del servidor OAuth externo para manejar adecuadamente las solicitudes que incluyen el encabezado `Access-Control-Request-Method`. El servidor parece tener un error o una mala configuración que provoca que omita los encabezados CORS requeridos cuando este encabezado específico está presente.
 
-## Solution: Proxy Server
+## Solución: Servidor Proxy
 
-To eliminate the CORS preflight request issue, we implemented a proxy server that:
+Para eliminar el problema de la solicitud preliminar CORS, implementamos un servidor proxy que:
 
-1. **Eliminates Cross-Origin Requests**: The React app makes same-origin requests to our local proxy
-2. **Handles Authentication Server-Side**: The proxy includes the Authorization header when making requests to the external API
-3. **Avoids Preflight Triggers**: No custom headers or cross-origin requests from the browser
+1. **Elimina Solicitudes de Origen Cruzado**: La aplicación React realiza solicitudes de mismo origen a nuestro proxy local.
+2. **Maneja la Autenticación del Lado del Servidor**: El proxy incluye el encabezado de autorización al realizar solicitudes a la API externa.
+3. **Evita Activadores de Solicitudes Preliminares**: No hay encabezados personalizados ni solicitudes de origen cruzado desde el navegador.
 
-### Implementation
+### Implementación
 
-#### Dependencies Installed
+#### Dependencias Instaladas
 ```bash
 npm install express cors http-proxy-middleware concurrently
 ```
 
-- **express**: Web server framework for the proxy
-- **cors**: CORS middleware to handle cross-origin requests from the React app
-- **http-proxy-middleware**: Middleware for proxying requests (available for future use)
-- **concurrently**: Utility to run both React and proxy servers simultaneously
+- **express**: Framework de servidor web para el proxy.
+- **cors**: Middleware CORS para manejar solicitudes de origen cruzado desde la aplicación React.
+- **http-proxy-middleware**: Middleware para proxy de solicitudes (disponible para uso futuro).
+- **concurrently**: Utilidad para ejecutar simultáneamente los servidores de React y proxy.
 
-#### Proxy Server (`proxy-server.js`)
+#### Servidor Proxy (`proxy-server.js`)
 
-The proxy server runs on port 3001 and provides an endpoint `/api/oauth/token` that:
-- Accepts POST requests from the React app (same-origin, no CORS issues)
-- Makes the actual OAuth request to the external API with proper credentials
-- Returns the token response to the React app
+El servidor proxy se ejecuta en el puerto 3001 y proporciona un endpoint `/api/oauth/token` que:
+- Acepta solicitudes POST de la aplicación React (mismo origen, sin problemas de CORS).
+- Realiza la solicitud OAuth real a la API externa con las credenciales adecuadas.
+- Devuelve la respuesta del token a la aplicación React.
 
-#### Updated React Code
+#### Código React Actualizado
 
-The `getToken()` function now makes requests to `http://localhost:3001/api/oauth/token` instead of the external API directly, eliminating all CORS complications.
+La función `getToken()` ahora realiza solicitudes a `http://localhost:3001/api/oauth/token` en lugar de a la API externa directamente, eliminando todas las complicaciones de CORS.
 
-#### NPM Scripts
+#### Scripts de NPM
 
-Added convenient scripts to `package.json`:
-- `npm run proxy`: Start only the proxy server
-- `npm run dev`: Start both proxy and React servers concurrently
+Se añadieron scripts convenientes a `package.json`:
+- `npm run proxy`: Iniciar solo el servidor proxy.
+- `npm run dev`: Iniciar simultáneamente los servidores de proxy y React.
 
-## Usage
+## Uso
 
-### Development Mode (Recommended)
-Start both servers together:
+### Modo de Desarrollo (Recomendado)
+Iniciar ambos servidores juntos:
 ```bash
 npm run dev
 ```
 
-### Manual Mode
-Start servers separately:
+### Modo Manual
+Iniciar los servidores por separado:
 ```bash
-# Terminal 1 - Start proxy server
+# Terminal 1 - Iniciar servidor proxy
 npm run proxy
 
-# Terminal 2 - Start React app  
+# Terminal 2 - Iniciar aplicación React  
 npm start
 ```
-## Technical Flow
 
-1. React app makes POST request to `localhost:3001/api/oauth/token` (same-origin)
-2. No preflight request triggered (same-origin + standard headers)
-3. Proxy server receives request and makes actual API call with Authorization header
-4. External API responds normally (no CORS issues from server-to-server call)
-5. Proxy returns response to React app
+## Flujo Técnico
 
-This solution completely bypasses the browser's CORS preflight mechanism while maintaining the same functionality from the application's perspective.
+1. La aplicación React realiza una solicitud POST a `localhost:3001/api/oauth/token` (mismo origen).
+2. No se activa la solicitud preliminar (mismo origen + encabezados estándar).
+3. El servidor proxy recibe la solicitud y realiza la llamada a la API real con el encabezado de autorización.
+4. La API externa responde normalmente (sin problemas de CORS en la llamada de servidor a servidor).
+5. El proxy devuelve la respuesta a la aplicación React.
+
+Esta solución elude completamente el mecanismo de solicitud preliminar CORS del navegador mientras mantiene la misma funcionalidad desde la perspectiva de la aplicación.
